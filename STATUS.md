@@ -27,7 +27,7 @@
 
 ### Awaiting the owner
 
-- [ ] **Review and merge [PR #1](https://github.com/kircm/hyperagent_demo_events_website_poc/pull/1).** Six commits: the imported code, three fixes, local setup, and these docs.
+- [ ] **Review and merge [PR #1](https://github.com/kircm/hyperagent_demo_events_website_poc/pull/1).** Seven commits: the imported code, three fixes, local setup, these docs, and an expanded `.gitignore`.
 - [ ] **Answer the [decisions below](#decisions-needed).** Several next steps depend on them.
 
 ### Up next, in recommended order
@@ -49,6 +49,7 @@ Everything else is in [ROADMAP.md](ROADMAP.md), with priorities, sizes and reaso
 
 | Date | What | Where |
 |---|---|---|
+| 2026-09-29 | `.gitignore` expanded: SQLite at any path, key files, editor, agent-local and OS files, coverage. The old file would have let `git add -A` commit a key file and a stray database | PR #1, commit G |
 | 2026-09-29 | Handover docs: README, AGENTS, ROADMAP, STATUS, CLAUDE.md | PR #1, commit F |
 | 2026-09-29 | Fix: the page `npm start` serves now uses the API. `RemoteStore` gets its first coverage (27 assertions), and a key-less server explains paid events up front | PR #1, `c889336` |
 | 2026-09-29 | `.env.example`, Node floor corrected to ≥22.13, and `.env` loading with no dependency | PR #1, `2a5c281` |
@@ -111,6 +112,7 @@ Newest first. Record *what* was verified and *how*, so the next agent knows what
 - `RemoteStore` ran against the real API for the first time: 27 assertions, and it passed first time.
 - Everything pushed to GitHub was verified byte-identical to the local tree by git blob SHA-1.
 - The public share links were checked in a real browser and serve the current artifact version.
+- `.gitignore` checked with git in a scratch repo. None of the 25 tracked files, or shared agent config such as `.claude/settings.json`, is ignored, and all 30 junk probes are (the old file caught 13). On a messy working copy, `git add -A` stages exactly the 25 intended files; with the old file it staged 33.
 
 **2026-09-10 · Phase 3 · 311 assertions**
 

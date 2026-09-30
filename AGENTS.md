@@ -33,7 +33,7 @@ These are load-bearing. Only break one with the owner's explicit agreement, reco
 5. **Email is enqueued, never sent inline.** Call `enqueueEmail()` inside the same transaction as the state change it describes, with a dedupe key. The worker sends it.
 6. **`public/index.html` is generated and committed.** After touching `public/app.js`, `public/index.template.html` or `server/seed-data.mjs`, run `npm run build`. `npm test` fails if you forget.
 7. **Seed data must never be able to reach a real inbox.** Use reserved domains only: `example.com`, `example.org`, `example.net`, or `*.example`. A test enforces this.
-8. **No secrets in the repo.** Configuration is environment variables only. `.env` is gitignored, and `.env.example` documents everything.
+8. **No secrets in the repo.** Configuration is environment variables only. `.env`, `.env.*` and key files (`*.pem`, `*.key`) are gitignored, and `.env.example` documents everything. When you introduce a new kind of local or generated file, add it to `.gitignore`.
 9. **`npm test` passes before you push.** It takes about 2 seconds, so there's no excuse.
 10. **STATUS.md stays current.** It's how the next agent learns what you did.
 
@@ -148,6 +148,7 @@ In the front end, `window.GATHER_API_BASE` selects the store (§4). You rarely s
 ├── ROADMAP.md                 prioritised enhancements and ideas
 ├── CLAUDE.md                  points agents that only read CLAUDE.md here
 ├── .env.example               every setting, documented
+├── .gitignore                 databases, .env and keys, logs, editor, agent-local and OS files
 ├── package.json               scripts only; no dependencies
 ├── build.mjs                  template + app.js + seed + rebaseSeed → public/index.html
 ├── preview-emails.mjs         renders every template to public/email-preview.html
