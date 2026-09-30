@@ -15,7 +15,8 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { rmSync } from 'node:fs';
+import { rmSync, readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.mjs';
@@ -24,6 +25,8 @@ import { startStripeStub, MAGIC_FAIL_AMOUNT } from './stripe-stub.mjs';
 import { startEmailStub } from './email-stub.mjs';
 import { renderEmail, EMAIL_TYPES } from './templates.mjs';
 import * as mail from './email.mjs';
+import { buildSeed, rebaseSeed } from './seed-data.mjs';
+import { renderIndex, withoutSeedLine } from '../build.mjs';
 
 const SERVER = fileURLToPath(new URL('./server.mjs', import.meta.url));
 const SEEDER = fileURLToPath(new URL('./seed.mjs', import.meta.url));
@@ -1137,6 +1140,82 @@ try {
     let threw = null;
     try { renderEmail('not_a_real_type', { event, user, payload }); } catch (err) { threw = err; }
     check('an unknown type throws rather than sending blank mail', Boolean(threw));
+  }
+
+  console.log('\n— the standalone demo never goes stale');
+  {
+    const DAY = 86400000;
+    // Built on Oct 1, viewed on Dec 1: two months later, across the US end
+    // of daylight saving (Nov 1, 2026) — the case that breaks naive shifting.
+    const builtAt = Date.UTC(2026, 9, 1, 16, 0);
+    const viewedAt = Date.UTC(2026, 11, 1, 16, 0);
+    const seed = { ...buildSeed({ from: builtAt }), builtAt };
+    const upcomingAt = (s, at) => s.events
+      .filter((e) => new Date(e.endsAt || e.startsAt).getTime() >= at).length;
+
+    eq('a fresh build has 8 upcoming events', upcomingAt(seed, builtAt), 8);
+    eq('  ...all of which go stale if nothing rebases them', upcomingAt(seed, viewedAt), 0);
+
+    const same = rebaseSeed(seed, builtAt + 5000);
+    eq('rebasing a freshly built seed changes nothing',
+      JSON.stringify(same.events), JSON.stringify(seed.events));
+
+    const moved = rebaseSeed(seed, viewedAt);
+    eq('rebased two months on, all 8 are upcoming again', upcomingAt(moved, viewedAt), 8);
+    eq('  ...and the past event stays in the past', moved.events.length - upcomingAt(moved, viewedAt), 1);
+
+    const wall = (iso, tz) => new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(new Date(iso));
+    check('every event keeps its local start time across the DST change',
+      seed.events.every((e, i) => wall(e.startsAt, e.timezone) === wall(moved.events[i].startsAt, e.timezone)));
+    const jazzBefore = seed.events.find((e) => e.key === 'jazz');
+    const jazzAfter = moved.events.find((e) => e.key === 'jazz');
+    eq('  ...so the jazz night is still 19:30 in New York', wall(jazzAfter.startsAt, 'America/New_York'), '19:30');
+    check('  ...even though its UTC offset moved by an hour',
+      (new Date(jazzAfter.startsAt) - new Date(jazzBefore.startsAt)) % DAY === 3600000);
+    check('durations are preserved exactly', seed.events.every((e, i) => {
+      const m = moved.events[i];
+      return (new Date(e.endsAt) - new Date(e.startsAt)) === (new Date(m.endsAt) - new Date(m.startsAt));
+    }));
+
+    const holdBefore = jazzBefore.registrations.find((r) => r.status === 'pending');
+    const holdAfter = jazzAfter.registrations.find((r) => r.status === 'pending');
+    eq('a seeded payment hold keeps its remaining time',
+      new Date(holdAfter.holdExpiresAt).getTime() - viewedAt,
+      new Date(holdBefore.holdExpiresAt).getTime() - builtAt);
+    check('registration timestamps move by exactly the elapsed time',
+      seed.events.every((e, i) => e.registrations.every((r, j) =>
+        new Date(moved.events[i].registrations[j].createdAt) - new Date(r.createdAt) === viewedAt - builtAt)));
+
+    // It is inlined into the page by its source text, so it must stand alone.
+    const rebuilt = new Function(`return (${rebaseSeed.toString()});`)();
+    eq('rebaseSeed behaves identically when rebuilt from its own source',
+      JSON.stringify(rebuilt(seed, viewedAt)), JSON.stringify(moved));
+
+    // And the copy actually embedded in the committed page works on its own.
+    const committed = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    const block = committed.match(/<script>\s*\/\* Injected by build\.mjs[\s\S]*?<\/script>/);
+    check('the committed page carries the injected seed block', Boolean(block));
+    const page = { window: {} };
+    runInNewContext(block[0].replace(/^<script>/, '').replace(/<\/script>$/, ''), page);
+    const embedded = page.window.GATHER_REBASE;
+    eq('  ...including the rebase function', typeof embedded, 'function');
+    if (typeof embedded === 'function' && typeof page.window.GATHER_SEED?.builtAt === 'number') {
+      const ninetyDaysOn = page.window.GATHER_SEED.builtAt + 90 * DAY;
+      eq('  ...which revives the committed seed 90 days after it was built',
+        upcomingAt(embedded(page.window.GATHER_SEED, ninetyDaysOn), ninetyDaysOn), 8);
+    } else {
+      // Report rather than throw, so the freshness check below still runs.
+      check('  ...which revives the committed seed 90 days after it was built', false,
+        'the committed page has no rebase function or build timestamp');
+    }
+
+    // index.html is committed, so it must match its sources. Only the seed
+    // line legitimately differs between two builds.
+    const fresh = await renderIndex();
+    check('public/index.html matches app.js and the template (run `npm run build` if this fails)',
+      withoutSeedLine(committed) === withoutSeedLine(fresh.html));
   }
 
   console.log('\n— a server with no Stripe keys degrades gracefully');

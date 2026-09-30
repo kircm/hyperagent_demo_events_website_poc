@@ -454,3 +454,100 @@ export function buildSeed({ from = Date.now() } = {}) {
 export const SEED_META = {
   demoAccounts: HOSTS.map((u) => ({ email: u.email, name: u.name })),
 };
+
+/* --------------------------------------------------------------- rebasing */
+
+/**
+ * Shift a materialised seed so its dates are relative to `now` rather than to
+ * the moment it was built.
+ *
+ * Why this exists: build.mjs bakes the seed into the standalone page as
+ * absolute timestamps. Without rebasing, a page built on the 10th shows "in 5
+ * days" events that already happened by the 29th — the live demo decayed to
+ * one upcoming event in three weeks. The server never needs this, because
+ * `npm run seed` materialises fresh dates every time it runs.
+ *
+ *   • Events move by whole calendar days and keep their local wall-clock time
+ *     in their own timezone, so a 7:30 PM show stays 7:30 PM across a
+ *     daylight-saving change instead of drifting to 6:30.
+ *   • Registration timestamps (created, paid, hold expiry) move by the exact
+ *     elapsed time, so "held for 22 more minutes" still means 22 minutes.
+ *
+ * MUST STAY SELF-CONTAINED. build.mjs inlines this function into the page by
+ * its source text (Function.prototype.toString), so it cannot reference
+ * anything outside its own body. The build verifies this and fails loudly if
+ * it ever stops being true.
+ */
+export function rebaseSeed(seed, now) {
+  if (!seed || typeof seed.builtAt !== 'number' || !Array.isArray(seed.events)) return seed;
+  const at = typeof now === 'number' ? now : Date.now();
+  const DAY = 86400000;
+  const shiftMs = at - seed.builtAt;
+  if (Math.abs(shiftMs) < 60000) return seed; // freshly built: nothing to move
+
+  // Calendar days between build and now in the viewer's local time, so the
+  // "In 5 days" labels read the same as on the day the page was built.
+  const startOfDay = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const dayShift = Math.round((startOfDay(at) - startOfDay(seed.builtAt)) / DAY);
+
+  const wallClock = (utcMs, tz) => {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p = {};
+    for (const { type, value } of fmt.formatToParts(new Date(utcMs))) p[type] = value;
+    return { y: +p.year, m: +p.month, d: +p.day, hh: +p.hour % 24, mm: +p.minute, ss: +p.second };
+  };
+  const offsetMs = (utcMs, tz) => {
+    const whole = Math.floor(utcMs / 1000) * 1000;
+    const w = wallClock(whole, tz);
+    return Date.UTC(w.y, w.m - 1, w.d, w.hh, w.mm, w.ss) - whole;
+  };
+  // Wall-clock time in `tz` -> UTC instant. Two passes settle DST edges.
+  const zonedToUtc = (y, m, d, hh, mm, tz) => {
+    let utc = Date.UTC(y, m - 1, d, hh, mm);
+    for (let i = 0; i < 2; i++) utc = Date.UTC(y, m - 1, d, hh, mm) - offsetMs(utc, tz);
+    return utc;
+  };
+
+  const moveEventTime = (iso, tz) => {
+    if (!iso) return iso;
+    const t = new Date(iso).getTime();
+    try {
+      const w = wallClock(t, tz);
+      // Day arithmetic in UTC space handles month and year rollover for free.
+      const day = new Date(Date.UTC(w.y, w.m - 1, w.d + dayShift));
+      return new Date(zonedToUtc(
+        day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), w.hh, w.mm, tz,
+      )).toISOString();
+    } catch {
+      return new Date(t + dayShift * DAY).toISOString(); // unknown timezone: plain shift
+    }
+  };
+  const moveInstant = (iso) => (iso ? new Date(new Date(iso).getTime() + shiftMs).toISOString() : iso);
+
+  return {
+    ...seed,
+    builtAt: at,
+    events: seed.events.map((ev) => {
+      const startsAt = moveEventTime(ev.startsAt, ev.timezone);
+      // Keep the duration exact rather than re-deriving the end's wall time.
+      const endsAt = ev.endsAt
+        ? new Date(new Date(startsAt).getTime() + (new Date(ev.endsAt) - new Date(ev.startsAt))).toISOString()
+        : ev.endsAt;
+      return {
+        ...ev,
+        startsAt,
+        endsAt,
+        registrations: (ev.registrations || []).map((r) => ({
+          ...r,
+          createdAt: moveInstant(r.createdAt),
+          paidAt: moveInstant(r.paidAt),
+          holdExpiresAt: moveInstant(r.holdExpiresAt),
+        })),
+      };
+    }),
+  };
+}

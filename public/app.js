@@ -270,7 +270,9 @@ function validateEventInput(input, { partial = false } = {}) {
 /* ==================================================== LocalStore (device) */
 
 function LocalStore() {
-  const KEY = 'gather.state.v1';
+  // v2: seeds are now rebased onto the viewer's clock. Bumping the key discards
+  // v1 state, whose dates were frozen at build time and have gone stale.
+  const KEY = 'gather.state.v2';
   let state = load();
 
   function load() {
@@ -288,12 +290,17 @@ function LocalStore() {
   }
 
   function seed() {
-    const users = SEED.users.map((u) => ({ id: uuid(), key: u.key, email: u.email, name: u.name }));
+    // The seed's dates were fixed when this page was built. Move them onto
+    // today's clock so a page built weeks ago still has upcoming events.
+    const base = typeof window.GATHER_REBASE === 'function'
+      ? window.GATHER_REBASE(SEED, Date.now())
+      : SEED;
+    const users = base.users.map((u) => ({ id: uuid(), key: u.key, email: u.email, name: u.name }));
     const byKey = new Map(users.map((u) => [u.key, u.id]));
     const events = [];
     const registrations = [];
     const taken = new Set();
-    for (const ev of SEED.events) {
+    for (const ev of base.events) {
       let slug = slugify(ev.title); let n = 2;
       while (taken.has(slug)) slug = `${slugify(ev.title)}-${n++}`;
       taken.add(slug);

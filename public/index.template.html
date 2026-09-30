@@ -376,8 +376,11 @@ select.inp{appearance:none; background-image:url("data:image/svg+xml;utf8,<svg x
 <div id="root"></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script>
-/* Injected by build.mjs — the same seed the API database is loaded with. */
+/* Injected by build.mjs — the same seed the API database is loaded with.
+   Its dates are fixed at build time; GATHER_REBASE moves them onto the
+   viewer's clock on first load, so an old build never goes stale. */
 window.GATHER_SEED = __GATHER_SEED__;
+window.GATHER_REBASE = __GATHER_REBASE__;
 
 /* Point this at your deployed API to switch from browser storage to the real
    back end. Left null, the app runs entirely on-device. */
