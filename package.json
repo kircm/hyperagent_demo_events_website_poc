@@ -2,15 +2,19 @@
   "name": "gather",
   "version": "1.0.0",
   "private": true,
-  "description": "Publish events, register for events. Zero-dependency Node API + static front end.",
+  "description": "Gather — publish events, register for them, pay for tickets, get emailed. A zero-dependency proof of concept built with Hyperagent.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kircm/hyperagent_demo_events_website_poc.git"
+  },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --no-warnings server/server.mjs",
-    "seed": "node --no-warnings server/seed.mjs",
-    "reseed": "node --no-warnings server/seed.mjs --reset",
+    "start": "node --no-warnings --env-file-if-exists=.env server/server.mjs",
+    "seed": "node --no-warnings --env-file-if-exists=.env server/seed.mjs",
+    "reseed": "node --no-warnings --env-file-if-exists=.env server/seed.mjs --reset",
     "build": "node --no-warnings build.mjs",
     "preview:email": "node --no-warnings preview-emails.mjs",
     "test": "node --no-warnings server/test.mjs"
