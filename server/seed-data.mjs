@@ -55,37 +55,50 @@ export const COVERS = {
 
 /* ------------------------------------------------------------------- users */
 
+// Every seeded address uses a domain reserved by RFC 2606 (example.com/.org/
+// .net, or the .example TLD), which is guaranteed never to deliver. That
+// matters because the platform really does send email: a host cancelling a
+// seeded event fans out to every seeded guest, and with a provider key
+// configured, a realistic-looking gmail.com address would reach whoever
+// actually owns it. `npm test` fails if a non-reserved domain creeps back in.
+
 // The six hosts. These double as the demo sign-in accounts.
 const HOSTS = [
-  { key: 'maya', email: 'maya@rooftopsessions.co', name: 'Maya Okonkwo' },
-  { key: 'devon', email: 'devon@rustbelt.dev', name: 'Devon Reyes' },
-  { key: 'sam', email: 'sam@trailheadatx.com', name: 'Sam Whitfield' },
-  { key: 'lena', email: 'lena@kilnandco.studio', name: 'Lena Brandt' },
-  { key: 'tobias', email: 'tobias@seedtable.vc', name: 'Tobias Grant' },
-  { key: 'priya', email: 'priya@formfunction.design', name: 'Priya Raman' },
+  { key: 'maya', email: 'maya@rooftopsessions.example', name: 'Maya Okonkwo' },
+  { key: 'devon', email: 'devon@rustbelt.example', name: 'Devon Reyes' },
+  { key: 'sam', email: 'sam@trailhead.example', name: 'Sam Whitfield' },
+  { key: 'lena', email: 'lena@kilnandco.example', name: 'Lena Brandt' },
+  { key: 'tobias', email: 'tobias@seedtable.example', name: 'Tobias Grant' },
+  { key: 'priya', email: 'priya@formfunction.example', name: 'Priya Raman' },
 ];
 
 // A crowd. Large events need enough distinct people to fill a capacity meter
 // to a believable level — six attendees against a 120-seat room looks broken.
 const CROWD = [
-  ['Noah Feldman', 'noah.feldman@gmail.com'], ['Amara Diallo', 'amara@hey.com'],
-  ['Jesse Lin', 'jesse.lin@fastmail.com'], ['Yuki Tanaka', 'yuki.tanaka@proton.me'],
-  ['Ines Kovac', 'ines.kovac@gmail.com'], ['Marcus Bell', 'marcus.bell@outlook.com'],
-  ['Sofia Ruiz', 'sofia@ruizstudio.com'], ['Theo Lambert', 'theo.lambert@gmail.com'],
-  ['Nadia Hassan', 'nadia.hassan@hey.com'], ['Owen Pritchard', 'owen.p@fastmail.com'],
-  ['Clara Mensah', 'clara.mensah@gmail.com'], ['Dev Patel', 'dev.patel@proton.me'],
-  ['Ruth Ostrowski', 'ruth.o@gmail.com'], ['Kai Nakamura', 'kai@nakamura.design'],
-  ['Bea Fontaine', 'bea.fontaine@hey.com'], ['Ellis Warner', 'ellis.warner@gmail.com'],
-  ['Priyanka Shah', 'priyanka.shah@outlook.com'], ['Tomas Rivera', 'tomas.rivera@gmail.com'],
-  ['Greta Lindqvist', 'greta.l@proton.me'], ['Isaac Mbeki', 'isaac.mbeki@gmail.com'],
-  ['Fern Whitaker', 'fern@whitakerco.com'], ['Anton Dvorak', 'anton.dvorak@hey.com'],
-  ['Leila Farsi', 'leila.farsi@gmail.com'], ['Cormac Doyle', 'cormac.doyle@fastmail.com'],
-  ['Simone Okafor', 'simone.okafor@gmail.com'], ['Rafael Costa', 'rafael@costa.build'],
-  ['Hana Brennan', 'hana.brennan@hey.com'], ['Viktor Sokolov', 'viktor.s@proton.me'],
-  ['Junie Park', 'junie.park@gmail.com'], ['Emeka Nwosu', 'emeka.nwosu@outlook.com'],
-  ['Astrid Vang', 'astrid.vang@gmail.com'], ['Malik Rahim', 'malik.rahim@hey.com'],
-  ['Rosa Delgado', 'rosa.delgado@gmail.com'], ['Bram de Vries', 'bram.devries@proton.me'],
-  ['Tessa Nolan', 'tessa.nolan@gmail.com'], ['Idris Bello', 'idris.bello@fastmail.com'],
+  ['Noah Feldman', 'noah.feldman@example.com'], ['Amara Diallo', 'amara@example.org'],
+  ['Jesse Lin', 'jesse.lin@example.net'], ['Yuki Tanaka', 'yuki.tanaka@example.com'],
+  ['Ines Kovac', 'ines.kovac@example.org'], ['Marcus Bell', 'marcus.bell@example.net'],
+  ['Sofia Ruiz', 'sofia@ruizstudio.example'], ['Theo Lambert', 'theo.lambert@example.com'],
+  ['Nadia Hassan', 'nadia.hassan@example.org'], ['Owen Pritchard', 'owen.p@example.net'],
+  ['Clara Mensah', 'clara.mensah@example.com'], ['Dev Patel', 'dev.patel@example.org'],
+  ['Ruth Ostrowski', 'ruth.o@example.net'], ['Kai Nakamura', 'kai@nakamura.example'],
+  ['Bea Fontaine', 'bea.fontaine@example.com'], ['Ellis Warner', 'ellis.warner@example.org'],
+  ['Priyanka Shah', 'priyanka.shah@example.net'], ['Tomas Rivera', 'tomas.rivera@example.com'],
+  ['Greta Lindqvist', 'greta.l@example.org'], ['Isaac Mbeki', 'isaac.mbeki@example.net'],
+  ['Fern Whitaker', 'fern@whitakerco.example'], ['Anton Dvorak', 'anton.dvorak@example.com'],
+  ['Leila Farsi', 'leila.farsi@example.org'], ['Cormac Doyle', 'cormac.doyle@example.net'],
+  ['Simone Okafor', 'simone.okafor@example.com'], ['Rafael Costa', 'rafael@costa.example'],
+  ['Hana Brennan', 'hana.brennan@example.org'], ['Viktor Sokolov', 'viktor.s@example.net'],
+  ['Junie Park', 'junie.park@example.com'], ['Emeka Nwosu', 'emeka.nwosu@example.org'],
+  ['Astrid Vang', 'astrid.vang@example.net'], ['Malik Rahim', 'malik.rahim@example.com'],
+  ['Rosa Delgado', 'rosa.delgado@example.org'], ['Bram de Vries', 'bram.devries@example.net'],
+  ['Tessa Nolan', 'tessa.nolan@example.com'], ['Idris Bello', 'idris.bello@example.org'],
+];
+
+/** Exported so the test suite can assert no seeded address can deliver. */
+export const SEED_USERS_FOR_AUDIT = () => [
+  ...HOSTS.map((h) => h.email),
+  ...CROWD.map(([, email]) => email),
 ];
 
 const USERS = [

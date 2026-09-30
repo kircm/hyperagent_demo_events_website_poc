@@ -25,7 +25,7 @@ import { startStripeStub, MAGIC_FAIL_AMOUNT } from './stripe-stub.mjs';
 import { startEmailStub } from './email-stub.mjs';
 import { renderEmail, EMAIL_TYPES } from './templates.mjs';
 import * as mail from './email.mjs';
-import { buildSeed, rebaseSeed } from './seed-data.mjs';
+import { buildSeed, rebaseSeed, SEED_USERS_FOR_AUDIT } from './seed-data.mjs';
 import { renderIndex, withoutSeedLine } from '../build.mjs';
 
 const SERVER = fileURLToPath(new URL('./server.mjs', import.meta.url));
@@ -322,7 +322,7 @@ try {
 
   console.log('\n— publishing a free event');
   let slug;
-  const hostToken = await signIn('maya@rooftopsessions.co', 'Maya Okonkwo');
+  const hostToken = await signIn('maya@rooftopsessions.example', 'Maya Okonkwo');
   {
     const r = await req('POST', '/api/events', {
       token: hostToken,
@@ -337,7 +337,7 @@ try {
     slug = r.json.event.slug;
     eq('slug derived from title', slug, 'tiny-test-supper');
     eq('starts with zero seats taken', r.json.event.confirmedSeats, 0);
-    eq('host is attributed', r.json.event.host.email, 'maya@rooftopsessions.co');
+    eq('host is attributed', r.json.event.host.email, 'maya@rooftopsessions.example');
     const dupe = await req('POST', '/api/events', {
       token: hostToken,
       body: { title: 'Tiny Test Supper', startsAt: iso(6, 19), city: 'Brooklyn, NY' },
@@ -1124,7 +1124,7 @@ try {
   console.log('\n— every template renders');
   {
     const event = direct.getEventBySlug('rooftop-sessions-jazz-small-plates');
-    const user = direct.getUserByEmail('maya@rooftopsessions.co');
+    const user = direct.getUserByEmail('maya@rooftopsessions.example');
     const payload = {
       guests: 2, amountCents: 7000, currency: 'usd',
       claimBy: new Date(Date.now() + 20 * 3600e3).toISOString(),
@@ -1216,6 +1216,25 @@ try {
     const fresh = await renderIndex();
     check('public/index.html matches app.js and the template (run `npm run build` if this fails)',
       withoutSeedLine(committed) === withoutSeedLine(fresh.html));
+  }
+
+  console.log('\n— seed data can never email a real person');
+  {
+    // RFC 2606 / 6761 reserved names: guaranteed never to deliver.
+    const reserved = /@(?:[a-z0-9-]+\.)*(?:example\.(?:com|org|net)|example|test|invalid|localhost)$/i;
+    const addresses = SEED_USERS_FOR_AUDIT();
+    eq('every seeded address uses a reserved, undeliverable domain',
+      addresses.filter((a) => !reserved.test(a)).join(', '), '');
+    eq('  ...all 42 of them', addresses.length, 42);
+    check('  ...and the audit regex really rejects deliverable domains',
+      !reserved.test('someone@gmail.com') && !reserved.test('x@notexample.com') && !reserved.test('x@example.com.evil.io'));
+
+    const page = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    const seedLine = page.split('\n').find((l) => l.startsWith('window.GATHER_SEED = '));
+    const shipped = JSON.parse(seedLine.slice('window.GATHER_SEED = '.length).replace(/;\s*$/, ''))
+      .users.map((u) => u.email);
+    eq('  ...including every address shipped inside the standalone page',
+      shipped.filter((a) => !reserved.test(a)).join(', '), '');
   }
 
   console.log('\n— a server with no Stripe keys degrades gracefully');

@@ -22,7 +22,7 @@ const event = {
   id: 'evt_preview',
   slug: 'rooftop-sessions-jazz-small-plates',
   status: 'published',
-  host: { id: 'u_host', name: 'Maya Okonkwo', email: 'maya@rooftopsessions.co' },
+  host: { id: 'u_host', name: 'Maya Okonkwo', email: 'maya@rooftopsessions.example' },
 };
 const user = { id: 'u_you', name: 'Sam Reader', email: 'you@example.com' };
 
