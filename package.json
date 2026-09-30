@@ -1,0 +1,19 @@
+{
+  "name": "gather",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Publish events, register for events. Zero-dependency Node API + static front end.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --no-warnings server/server.mjs",
+    "seed": "node --no-warnings server/seed.mjs",
+    "reseed": "node --no-warnings server/seed.mjs --reset",
+    "build": "node --no-warnings build.mjs",
+    "preview:email": "node --no-warnings preview-emails.mjs",
+    "test": "node --no-warnings server/test.mjs"
+  },
+  "dependencies": {}
+}
