@@ -225,23 +225,47 @@ async function refundUnseatable(registration) {
 
 /* ------------------------------------------------------------ static files */
 
+/**
+ * The committed index.html is standalone: it defaults to on-device storage so
+ * it works opened from disk or published as a single file. When THIS server
+ * serves it, the API is same-origin, so wire the page to it — otherwise
+ * `npm start` shows a UI that silently ignores the server behind it.
+ */
+const API_BASE_STANDALONE = 'window.GATHER_API_BASE = window.GATHER_API_BASE || null;';
+const API_BASE_SERVED = 'window.GATHER_API_BASE = window.GATHER_API_BASE || location.origin;';
+
+async function readAppShell() {
+  const html = await readFile(join(PUBLIC_DIR, 'index.html'), 'utf8');
+  if (!html.includes(API_BASE_STANDALONE)) {
+    console.warn('[gather] public/index.html has no API base marker — serving it unwired (on-device storage)');
+    return html;
+  }
+  return html.replace(API_BASE_STANDALONE, API_BASE_SERVED);
+}
+
+const SHELL_HEADERS = { 'content-type': MIME['.html'], 'cache-control': 'no-store' };
+
 async function serveStatic(req, res, pathname) {
   const rel = normalize(pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
   if (rel.startsWith('..')) return send(res, 403, { error: { code: 'forbidden', message: 'No.' } });
-  const file = join(PUBLIC_DIR, rel);
-  try {
-    const info = await stat(file);
-    if (!info.isFile()) throw new Error('not a file');
-    return send(res, 200, await readFile(file), {
-      'content-type': MIME[extname(file)] || 'application/octet-stream',
-      'cache-control': rel === 'index.html' ? 'no-store' : 'public, max-age=3600',
-    });
-  } catch {
+
+  if (rel !== 'index.html') {
+    const file = join(PUBLIC_DIR, rel);
     try {
-      return send(res, 200, await readFile(join(PUBLIC_DIR, 'index.html')), { 'content-type': MIME['.html'] });
-    } catch {
-      return send(res, 404, { error: { code: 'not_found', message: 'Not found.' } });
-    }
+      const info = await stat(file);
+      if (!info.isFile()) throw new Error('not a file');
+      return send(res, 200, await readFile(file), {
+        'content-type': MIME[extname(file)] || 'application/octet-stream',
+        'cache-control': 'public, max-age=3600',
+      });
+    } catch { /* not a static file: fall through to the app shell */ }
+  }
+
+  // The app shell, for / and for any unknown path so client routing works.
+  try {
+    return send(res, 200, await readAppShell(), SHELL_HEADERS);
+  } catch {
+    return send(res, 404, { error: { code: 'not_found', message: 'Not found.' } });
   }
 }
 

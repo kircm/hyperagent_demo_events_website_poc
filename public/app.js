@@ -1254,6 +1254,13 @@ function attendeePanel(ev, reg) {
       <div class="banner banner-info"><span>ℹ</span><span>${ev.status === 'cancelled'
     ? 'Registration is closed — this event was cancelled.'
     : 'Registration is closed for this event.'}</span></div>`;
+  } else if (ev.isPaid && !ev.isFull && app.payments === 'off') {
+    // The server has no Stripe key. Say so up front rather than letting
+    // someone fill in the form and hit an error. (A full event can still be
+    // waitlisted — that never takes money.)
+    body = `
+      <div class="banner banner-info"><span>ℹ</span><span>This server isn’t set up to take payments yet, so paid tickets can’t be sold here. Free events work normally.</span></div>
+      <p class="panel-note">Server owners: set STRIPE_SECRET_KEY to enable paid events.</p>`;
   } else if (!app.user) {
     body = `
       ${ev.isFull ? '<div class="banner banner-warn"><span>◔</span><span>Sold out — you can still join the waitlist.</span></div>' : ''}
@@ -2285,5 +2292,9 @@ window.addEventListener('hashchange', () => {
   } catch { /* keep the store's default */ }
   await render();
 })();
+
+// A handle for automated tests and agent-driven browser checks, so they can
+// call the store directly instead of scripting clicks. Not a public API.
+window.__GATHER__ = { Store, app, render };
 
 })();

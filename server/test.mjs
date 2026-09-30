@@ -148,6 +148,15 @@ child.stderr.on('data', (d) => process.stderr.write(`[server] ${d}`));
 
 // A second server with no Stripe configuration at all, to prove the app
 // degrades gracefully instead of offering tickets nobody could buy.
+// Seeded, so it matches the most common local setup: `npm run seed && npm
+// start` with no keys, where seeded paid events exist but can't be sold.
+const seededNoPay = spawnSync(process.execPath, ['--no-warnings', SEEDER], {
+  env: { ...process.env, GATHER_DB: DB_NOPAY }, encoding: 'utf8',
+});
+if (seededNoPay.status !== 0) {
+  console.error('seeding the no-pay database failed:\n', seededNoPay.stdout, seededNoPay.stderr);
+  process.exit(1);
+}
 const noPayEnv = { ...process.env, GATHER_DB: DB_NOPAY, PORT: String(PORT_NOPAY) };
 for (const key of [
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_API_BASE',
@@ -177,6 +186,44 @@ const setEmailAttempts = (id, n) => direct.raw.prepare('UPDATE email_outbox SET 
   .run(n, id);
 /** Decode an .ics attachment back to text. */
 const icsText = (attachment) => Buffer.from(attachment.content, 'base64').toString('utf8');
+
+/* ------------------------------------------------------------- UI client kit */
+
+/**
+ * Boot the real front end in a VM against a running server, using the HTML
+ * that server actually serves. The DOM is a stub: this exercises the app's
+ * data layer (RemoteStore) through exactly the code a browser runs, not its
+ * pixels. It exists because a remote browser can't reach a local server, and
+ * RemoteStore otherwise has no automated coverage at all.
+ */
+async function bootUi(base) {
+  const served = await (await fetch(`${base}/`)).text();
+  const scripts = [...served.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  const stubEl = () => ({
+    innerHTML: '', textContent: '', value: '', style: {}, dataset: {}, hidden: false, disabled: false,
+    appendChild() {}, remove() {}, click() {}, select() {}, focus() {}, setSelectionRange() {},
+    setAttribute() {}, scrollIntoView() {}, querySelector: () => null, querySelectorAll: () => [],
+  });
+  const nodes = { root: stubEl(), toasts: stubEl() };
+  const location = { hash: '#/', origin: base, pathname: '/', href: `${base}/#/`, assign() {} };
+  const window = { location, scrollY: 0, addEventListener() {}, scrollTo() {} };
+  window.top = window;
+  const document = {
+    getElementById: (id) => nodes[id] || null,
+    querySelector: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: stubEl, body: stubEl(), activeElement: null,
+    execCommand: () => false,
+  };
+  // No localStorage in the context: the app's storage probe falls back to
+  // memory, exactly as it does inside a sandboxed iframe.
+  runInNewContext(scripts.join('\n;\n'), {
+    window, document, location, navigator: {}, console,
+    fetch, URL, URLSearchParams, Blob, crypto: globalThis.crypto, setTimeout, clearTimeout,
+  });
+  // boot() is async; it has finished once the first render lands.
+  for (let i = 0; i < 100 && !nodes.root.innerHTML; i++) await new Promise((r) => setTimeout(r, 30));
+  return { window, root: nodes.root };
+}
 
 async function waitFor(base) {
   for (let i = 0; i < 80; i++) {
@@ -1142,6 +1189,76 @@ try {
     check('an unknown type throws rather than sending blank mail', Boolean(threw));
   }
 
+  console.log('\n— the page the server serves talks to the API');
+  {
+    const served = await (await fetch(`${BASE}/`)).text();
+    check('the server wires the page it serves to its own API',
+      served.includes('window.GATHER_API_BASE = window.GATHER_API_BASE || location.origin;'));
+    const deep = await (await fetch(`${BASE}/e/anything-at-all`)).text();
+    check('  ...on deep links served as the app shell too', deep.includes('|| location.origin;'));
+    const committed = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    check('  ...while the committed standalone file stays on-device',
+      committed.includes('window.GATHER_API_BASE = window.GATHER_API_BASE || null;'));
+
+    const ui = await bootUi(BASE);
+    const S = ui.window.__GATHER__?.Store;
+    eq('the front end boots and picks the API store', S?.mode, 'remote');
+    check('  ...and its footer says it is connected to the API', ui.root.innerHTML.includes('Connected to the API'));
+    check('  ...with live Stripe Checkout', ui.root.innerHTML.includes('Stripe Checkout live'));
+    check('  ...and delivering email', ui.root.innerHTML.includes('Email via resend'));
+
+    const me = await S.signIn({ email: 'ui.client@example.com', name: 'UI Client' });
+    eq('signing in through the UI client works', me.email, 'ui.client@example.com');
+    eq('  ...and the session sticks', (await S.me())?.email, 'ui.client@example.com');
+
+    const listed = await S.listEvents({ when: 'upcoming' });
+    check('browse through the UI client returns seeded events',
+      listed.some((e) => e.slug === 'rust-for-javascript-developers'));
+    const music = await S.listEvents({ category: 'Music' });
+    check('  ...and passes filters through', music.length > 0 && music.every((e) => e.category === 'Music'));
+
+    const free = await S.register('rust-for-javascript-developers', { guests: 2, note: 'via the UI client' });
+    eq('a free registration through the UI client confirms', free.status, 'confirmed');
+    const detail = await S.getEvent('rust-for-javascript-developers');
+    eq('  ...the detail view sees it', detail.myRegistration?.status, 'confirmed');
+    eq('  ...with the party size', detail.myRegistration?.guests, 2);
+    check('  ...and it appears in my tickets',
+      (await S.myRegistrations()).some((r) => r.event.slug === 'rust-for-javascript-developers'));
+    eq('cancelling through the UI client works',
+      typeof (await S.cancelRegistration('rust-for-javascript-developers')).promoted, 'number');
+
+    const paid = await S.register('rooftop-sessions-jazz-small-plates', { guests: 1 });
+    eq('a paid registration through the UI client asks for payment', paid.status, 'payment_required');
+    check('  ...with a Stripe checkout url to redirect to',
+      /^https:\/\/checkout\.stripe\.test\//.test(paid.checkoutUrl || ''), paid.checkoutUrl);
+    eq('  ...and the client sees the pending hold',
+      (await S.getEvent('rooftop-sessions-jazz-small-plates')).myRegistration?.status, 'pending');
+    eq('releasing the hold through the UI client works',
+      (await S.releaseHold('rooftop-sessions-jazz-small-plates')).released, true);
+
+    await S.signOut();
+    eq('signing out through the UI client works', await S.me(), null);
+
+    await S.signIn({ email: 'lena@kilnandco.example', name: 'Lena Brandt' });
+    check('a seeded host sees their events through the UI client',
+      (await S.myEvents()).some((e) => e.slug === 'hand-building-ceramics-beginner-night'));
+    check('  ...and their guest list',
+      (await S.listRegistrations('hand-building-ceramics-beginner-night')).length >= 12);
+
+    const created = await S.createEvent({
+      title: 'Made Through The UI Client', summary: 'Proves the create form reaches the API.',
+      startsAt: iso(23, 18), endsAt: iso(23, 20), mode: 'in_person', city: 'Portland, OR',
+      category: 'Arts', capacity: 5, priceCents: 0, currency: 'usd', status: 'published',
+    });
+    eq('creating an event through the UI client works', created.slug, 'made-through-the-ui-client');
+    eq('  ...and editing it', (await S.updateEvent(created.slug, { summary: 'Edited.' })).summary, 'Edited.');
+
+    let refused = null;
+    try { await S.register(created.slug, { guests: 1 }); } catch (err) { refused = err; }
+    eq('server errors reach the UI with their code', refused?.code, 'host_cannot_register');
+    check('  ...and their human-readable message', /hosting this one/i.test(refused?.message || ''));
+  }
+
   console.log('\n— the standalone demo never goes stale');
   {
     const DAY = 86400000;
@@ -1264,6 +1381,29 @@ try {
       (await req('POST', `/api/events/${free.json.event.slug}/registrations`, {
         base: nopay, token: buyer, body: { guests: 1 },
       })).json.status, 'confirmed');
+
+    // The UI a newcomer actually sees after `npm run seed && npm start`.
+    const ui = await bootUi(nopay);
+    check('the UI footer says payments are not configured', ui.root.innerHTML.includes('Payments not configured'));
+    check('  ...and that email is not sending', ui.root.innerHTML.includes('Email not sending'));
+    ui.window.location.hash = '#/e/rooftop-sessions-jazz-small-plates';
+    await ui.window.__GATHER__.render();
+    check('a seeded paid event explains it cannot be sold here, before anyone tries',
+      ui.root.innerHTML.includes('isn’t set up to take payments'));
+    check('  ...instead of offering a register button', !ui.root.innerHTML.includes('data-act="register"'));
+
+    const S = ui.window.__GATHER__.Store;
+    await S.signIn({ email: 'nopay.attendee@example.com', name: 'No Pay Attendee' });
+    const heldBefore = (await S.getEvent('rooftop-sessions-jazz-small-plates')).event.heldSeats;
+    let refused = null;
+    try { await S.register('rooftop-sessions-jazz-small-plates', { guests: 1 }); } catch (err) { refused = err; }
+    eq('a paid registration attempted anyway is refused cleanly', refused?.code, 'payments_not_configured');
+    eq('  ...without stranding a seat in a hold',
+      (await S.getEvent('rooftop-sessions-jazz-small-plates')).event.heldSeats, heldBefore);
+    eq('  ...or leaving the attendee half-registered',
+      (await S.getEvent('rooftop-sessions-jazz-small-plates')).myRegistration, null);
+    eq('free events still register through the UI',
+      (await S.register('rust-for-javascript-developers', { guests: 1 })).status, 'confirmed');
 
     // Even with nowhere to send, the intent is recorded — so configuring a
     // provider later doesn't mean the notification was silently lost.
