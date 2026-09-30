@@ -1,21 +1,51 @@
-# Dependencies (there are none — keep it that way, see AGENTS.md)
+# What never gets committed. When you add a new kind of local or generated
+# file, add it here and note it in AGENTS.md.
+
+# Dependencies. There are none, and there should stay none (AGENTS.md, rule 1).
 node_modules/
 
-# SQLite databases and their WAL/journal side files
+# SQLite databases and their WAL/journal side files. GATHER_DB can point at
+# any path, so the common extensions are covered, not just gather.db.
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
 
-# Local configuration and secrets — copy .env.example to .env
+# Local configuration and secrets. Copy .env.example to .env.
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
-# Generated dev artifact: `npm run preview:email` regenerates it
+# Generated. `npm run preview:email` rebuilds the preview.
+# public/index.html is generated too, but it is committed on purpose so the
+# repo works without a build step (AGENTS.md, rule 6). Do not ignore it.
 public/email-preview.html
+coverage/
 
-# OS / editor noise
-.DS_Store
-Thumbs.db
+# Logs
 *.log
+npm-debug.log*
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Agent tools: personal, machine-local settings only. Shared agent files such
+# as AGENTS.md and CLAUDE.md are committed.
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Operating systems
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
