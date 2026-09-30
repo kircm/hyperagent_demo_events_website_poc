@@ -1,0 +1,21 @@
+# Dependencies (there are none — keep it that way, see AGENTS.md)
+node_modules/
+
+# SQLite databases and their WAL/journal side files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local configuration and secrets — copy .env.example to .env
+.env
+.env.*
+!.env.example
+
+# Generated dev artifact: `npm run preview:email` regenerates it
+public/email-preview.html
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
